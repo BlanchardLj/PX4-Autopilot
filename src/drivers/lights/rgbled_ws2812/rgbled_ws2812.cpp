@@ -45,9 +45,15 @@
 #include <drivers/device/spi.h>
 #include <lib/drivers/device/spi.h>
 #include <lib/led/led.h>
+#include <lib/parameters/param.h>
 #include <px4_platform_common/getopt.h>
 #include <px4_platform_common/i2c_spi_buses.h>
 #include <px4_platform_common/module.h>
+#include <uORB/Subscription.hpp>
+#include <uORB/SubscriptionCallback.hpp>
+#include <uORB/topics/parameter_update.h>
+#include <uORB/topics/vehicle_local_position_setpoint.h>
+#include <uORB/topics/manual_control_switches.h>
 
 using namespace time_literals;
 
@@ -58,15 +64,15 @@ using namespace time_literals;
 #define NCP5623_LED_PWM1    0x60  /**< pwm1 register */
 #define NCP5623_LED_PWM2    0x80  /**< pwm2 register */
 
-#define WS2812_LED_BRIGHT  0xff  /**< full brightness */
+#define WS2812_LED_BRIGHT  255  /**< full brightness */
 #define NCP5623_LED_OFF     0x00  /**< off */
 
-#define WS2812_H 52
-#define WS2812_L 21
+#define WS2812_H 0xf8
+#define WS2812_L 0xc0
 #define WS2812_RED 255<<8
 #define WS2812_BULE 50<<16 
 #define WS2812_OFF 0
-#define WS2812_LENGTH 2
+#define WS2812_LENGTH 3
 
 class RGBLED_WS2812 : public device::SPI, public I2CSPIDriver<RGBLED_WS2812>
 {
@@ -85,7 +91,8 @@ public:
 private:
 	int			send_led_rgb();
 
-//	int			write(uint8_t reg, uint8_t data);
+//        uORB::Subscription	_setpoint_sub{ORB_ID(vehicle_local_position_setpoint)};
+        uORB::Subscription	_setpoint_sub{ORB_ID(manual_control_switches)};
 
 	float			_brightness{1.0f};
 
@@ -98,10 +105,7 @@ private:
 
 	LedController		_led_controller;
 
-	uint8_t		_red{NCP5623_LED_PWM0};
-	uint8_t		_green{NCP5623_LED_PWM1};
-	uint8_t		_blue{NCP5623_LED_PWM2};
-        uint8_t         buf[24*WS2812_LENGTH];
+        uint8_t         buf[24*(WS2812_LENGTH+3)]={0};
 };
 
 RGBLED_WS2812::RGBLED_WS2812(const I2CSPIDriverConfig &config) :
@@ -118,37 +122,8 @@ RGBLED_WS2812::RGBLED_WS2812(const I2CSPIDriverConfig &config) :
 	//      R LED from = NCP5623_LED_PWM2
 	//      G LED from = NCP5623_LED_PWM1
 	//      B LED from = NCP5623_LED_PWM0
-//for(int i=0;i<WS2812_LENGTH;i++)
-//        {
-//  ws2812_pack(buf,WS2812_RED);
-//}
-//        const uint8_t sig[] = {NCP5623_LED_PWM0, NCP5623_LED_PWM1, NCP5623_LED_PWM2};
-//        // Process ordering in lsd to msd order.(BGR)
-//        uint8_t *color[] = {&_blue, &_green, &_red };
-//
-//	unsigned int s = 0;
-//
-//	for (unsigned int i = 0; i < arraySize(color); i++) {
-//		s = (ordering % 10) - 1;
-//
-//		if (s < arraySize(sig)) {
-//			*color[i] = sig[s];
-//		}
-//
-//		ordering /= 10;
-//	}
-}
 
-//int
-//RGBLED_WS2812::write(uint8_t reg, uint8_t data)
-//{
-//	uint8_t msg[1] = { 0x00 };
-//	msg[0] = ((reg & 0xe0) | (data & 0x1f));
-//
-//	int ret = transfer(&msg[0], 1, nullptr, 0);
-//
-//	return ret;
-//}
+}
 
 int
 RGBLED_WS2812::init()
@@ -169,15 +144,7 @@ RGBLED_WS2812::init()
 int
 RGBLED_WS2812::probe()
 {
-//	_retries = 2;
-//	int status = write(NCP5623_LED_CURRENT, NCP5623_LED_OFF);
-//
-//	if (status == PX4_ERROR) {
-//		set_device_address(NCP5623B_ADDR);
-//		status = write(NCP5623_LED_CURRENT, NCP5623_LED_OFF);
-//	}
-//
-//	return status;
+
     if (1) {
       return OK;
     }
@@ -240,15 +207,77 @@ RGBLED_WS2812::RunImpl()
 int
 RGBLED_WS2812::send_led_rgb()
 {
-        uint8_t msg[7] = {0x20, 0x70, 0x40, 0x70, 0x60, 0x70, 0x80};
-	uint8_t brightness = UINT8_MAX;
-
-	msg[0] = NCP5623_LED_CURRENT | (brightness & 0x1f);
-	msg[2] = _red | (uint8_t(_r * _brightness) & 0x1f);
-	msg[4] = _green | (uint8_t(_g * _brightness) & 0x1f);
-	msg[6] = _blue | (uint8_t(_b * _brightness) & 0x1f);
-
-	return transfer(&msg[0], nullptr, 7);
+//        uint8_t msg[7] = {0x20, 0x70, 0x40, 0x70, 0x60, 0x70, 0x80};
+//	uint8_t brightness = UINT8_MAX;
+//
+//	msg[0] = NCP5623_LED_CURRENT | (brightness & 0x1f);
+//	msg[2] = _red | (uint8_t(_r * _brightness) & 0x1f);
+//	msg[4] = _green | (uint8_t(_g * _brightness) & 0x1f);
+//	msg[6] = _blue | (uint8_t(_b * _brightness) & 0x1f);
+//        if (_setpoint_sub.updated()){
+//          vehicle_local_position_setpoint_s setpoint;
+//          if (_setpoint_sub.copy(&setpoint)) {
+//            if (setpoint.acceleration[0] > 5) {
+//              for(int i = 0; i < 24*WS2812_LENGTH; i++) {
+//                buf[i] = WS2812_H;
+//              }
+//            }
+//          }
+//        }
+//if (_setpoint_sub.updated()){
+//            manual_control_switches_s setpoint;
+//            if (_setpoint_sub.copy(&setpoint)) {
+//              if (setpoint.kill_switch == 1) {
+//                for(int i = 0; i < 24*WS2812_LENGTH; i++) {
+//                  buf[i] = WS2812_H;
+//                }
+//              }
+//              else {
+//                for (int i = 0; i < 24 * WS2812_LENGTH; i++) {
+//                  buf[i] = WS2812_L;
+//                }
+//              }
+//            }
+//          }
+        for (int j = 0 ; j < WS2812_LENGTH ; j++){
+        if (_g != 0){
+          for (int i = 0+24*j ; i < 8+24*j ; i++)
+            {
+                buf[i] = WS2812_H;
+            }
+        }
+        else {
+          for (int i = 0+24*j ; i < 8+24*j ; i++)
+          {
+            buf[i] = WS2812_L;
+          }
+        }
+        if (_r != 0){
+          for (int i = 8+24*j ; i < 16+24*j ; i++)
+          {
+            buf[i] = WS2812_H;
+          }
+        }
+        else {
+          for (int i = 8+24*j ; i < 16+24*j ; i++)
+          {
+            buf[i] = WS2812_L;
+          }
+        }
+        if (_b != 0){
+          for (int i = 16+24*j ; i < 24+24*j ; i++)
+          {
+            buf[i] = WS2812_H;
+          }
+        }
+        else {
+          for (int i = 16+24*j ; i < 24+24*j ; i++)
+          {
+            buf[i] = WS2812_L;
+          }
+        }
+      }
+	return transfer(&buf[0], nullptr, 24*(WS2812_LENGTH+3));
 }
 
 void
@@ -265,8 +294,7 @@ extern "C" __EXPORT int rgbled_ws2812_main(int argc, char *argv[])
 {
 	using ThisDriver = RGBLED_WS2812;
 	BusCLIArguments cli{false, true};
-	cli.default_spi_frequency = 100000;
-        cli.custom1 = 123;
+	cli.default_spi_frequency = 8000000;
 	int ch;
 
         while ((ch = cli.getOpt(argc, argv, "o:")) != EOF) {
